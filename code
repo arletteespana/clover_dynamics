@@ -1,0 +1,207 @@
+# === Complete and induced dynamics for clover-type networks ===
+# Includes: network construction, complete simulation, induced logic, and indicator calculation.
+
+import numpy as np
+import pandas as pd
+from itertools import product
+from collections import defaultdict
+import csv
+import matplotlib.pyplot as plt
+import networkx as nx
+import random
+from collections import defaultdict
+import os
+
+# === 1. Build Clover-type Network ===
+def build_fully_specified_clover_network(N, p):
+    A = np.zeros((N + 1, N + 1), dtype=int)
+    O = [1]
+    A[0, 1] = 1
+    for n in range(3, N + 2):
+        if np.random.rand() < p:
+            A[0, n - 1] = 1
+            O.append(n - 1)
+    O = sorted(O)
+    s = len(O) - 1
+    O.append(N)
+    for k in range(1, s + 2):
+        nk_prev, nk = O[k - 1], O[k]
+        if nk_prev != nk - 1:
+            for n in range(nk_prev, nk - 1):
+                A[n, n + 1] = 1
+    for k in range(2, s + 2):
+        nkm1 = O[k - 1] - 1
+        if nkm1 > 0:
+            A[nkm1, 0] = 1
+    A[N, 0] = 1
+    if N not in O[:-1]:
+        A[N - 1, N] = 1
+    A[0, 0] = 0
+    return A
+
+# === 2. Assign Signs to Interactions ===
+def assign_interaction_signs(A, q):
+    S = np.ones_like(A)
+    for i in range(A.shape[0]):
+        for j in range(A.shape[1]):
+            if A[i, j] != 0 and np.random.rand() < q:
+                S[i, j] = -1
+    return S
+
+# === 3. Boolean Dynamics ===
+def boolean_dynamics(M, x0, T):
+    traj = [x0.copy()]
+    x = x0.copy()
+    for _ in range(T):
+        x = np.sign(M.T @ x)
+        x[x == 0] = 1  # regla para signo cero
+        traj.append(x.copy())
+    return traj
+
+# === 4. Dominant Set and Depth ===
+def get_dominant_set_and_depth(A):
+    N = A.shape[0]
+    U = [0]
+    depth = 0
+    determined = set(U)
+    while len(determined) < N:
+        new_determined = set()
+        for v in range(N):
+            if v not in determined:
+                inputs = np.where(A[:, v] != 0)[0]
+                if all(i in determined for i in inputs):
+                    new_determined.add(v)
+        if not new_determined:
+            break
+        determined.update(new_determined)
+        depth += 1
+    return sorted(U), depth
+
+# === 4. Detecting cycles returning to the dominant node ===
+def find_cycles_to_zero(A, ℓ_max=None):
+    N = A.shape[0]
+    if ℓ_max is None:
+        ℓ_max = N + 1
+    cycles = []
+    def dfs(path):
+        last = path[-1]
+        if len(path) > ℓ_max:
+            return
+        for j in range(N):
+            if A[last, j]:
+                if j == 0 and len(path) > 1:
+                    cycles.append(list(path) + [0])
+                elif j not in path:
+                    dfs(path + [j])
+    dfs([0])
+    return cycles
+
+# === 5. Construction of induced logic Φ: B^ℓ → B ===
+def build_phi_clover(A, S, ℓ):
+    memory = {}
+    for hist in product([-1, 1], repeat=ℓ):
+        x = np.ones(A.shape[0], dtype=int)
+        x[0] = hist[0]
+        for t in range(1, ℓ):
+            x[0] = hist[t]
+            x = np.sign((A * S).T @ x)
+            x[x == 0] = 1
+        memory[hist] = x[0]
+    return lambda h: memory[tuple(h)]
+
+# === 6. Resumen de atractores y transitorios ===
+def summarize(attractors_dict, transients):
+    periods = [len(set(x[1] for x in values)) for values in attractors_dict.values()]
+    return {
+        'Nc': len(attractors_dict),
+        'mp': round(np.mean(periods), 2),
+        'mtm': round(np.mean(transients), 2),
+        'mtM': int(np.max(transients)),
+        'avg_basin': round(np.mean([len(v) for v in attractors_dict.values()]), 2)
+    }
+
+# === 7. Full simulation and induced logic (using the entire space) ===
+def simulate_clover_dynamics(N, p, q):
+    T = 2**(N + 1) + 1
+    A = build_fully_specified_clover_network(N, p)
+    S = assign_interaction_signs(A, q)
+    M = A * S
+    U, d = get_dominant_set_and_depth(A)
+    cycles = find_cycles_to_zero(A)
+    ℓ = max(len(c) for c in cycles) if cycles else 1
+    Phi = build_phi_clover(A, S, ℓ)
+
+    state_space_full = [np.array([1 if b == '1' else -1 for b in format(i, f'0{N+1}b')]) for i in range(2**(N+1))]
+    attractors_full, transients_full = defaultdict(list), []
+    for x0 in state_space_full:
+        traj = boolean_dynamics(M, x0, T)
+        seen = {}
+        for t, state in enumerate(traj):
+            key = tuple(state)
+            if key in seen:
+                start = seen[key]
+                attractors_full[tuple(traj[start])].append((x0.tolist(), t))
+                transients_full.append(t)
+                break
+            seen[key] = t
+
+    state_space_induced = list(product([-1, 1], repeat=ℓ))
+    attractors_induced, transients_induced = defaultdict(list), []
+    for y0 in state_space_induced:
+        history = list(y0)
+        seen = {}
+        for t in range(T):
+            key = tuple(history)
+            if key in seen:
+                start = seen[key]
+                attractors_induced[tuple(history)].append((list(y0), t))
+                transients_induced.append(t)
+                break
+            seen[key] = t
+            y_next = Phi(history)
+            history = [y_next] + history[:-1]
+
+    return {
+        'd': d,
+        'ℓ': ℓ,
+        'metrics_full': summarize(attractors_full, transients_full),
+        'metrics_induced': summarize(attractors_induced, transients_induced),
+        'A': A, 'S': S, 'M': M, 'Phi': Phi
+    }
+
+# === Average ensemble for Ns, p_values, q_values, saved to CSV===
+if __name__ == '__main__':
+    Ns = [4, 7, 10]
+    p_values = [1/4, 1/2, 3/4]
+    q_values = [1/4, 1/2, 3/4]
+    num_graphs = 10
+
+    rows = []
+    for N in Ns:
+        for p in p_values:
+            for q in q_values:
+                metrics_full_ens = defaultdict(list)
+                metrics_ind_ens = defaultdict(list)
+                for _ in range(num_graphs):
+                    result = simulate_clover_dynamics(N, p, q)
+                    for k, v in result['metrics_full'].items():
+                        metrics_full_ens[k].append(v)
+                    for k, v in result['metrics_induced'].items():
+                        metrics_ind_ens[k].append(v)
+                avg_full = {k: round(np.mean(v), 2) for k, v in metrics_full_ens.items()}
+                avg_ind = {k: round(np.mean(v), 2) for k, v in metrics_ind_ens.items()}
+                row = {
+                    'N': N, 'p': p, 'q': q,
+                    **{f'F_{k}': v for k, v in avg_full.items()},
+                    **{f'Phi_{k}': v for k, v in avg_ind.items()}
+                }
+                rows.append(row)
+
+    with open('ensemble_results.csv', 'w', newline='') as csvfile:
+        fieldnames = rows[0].keys()
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+    print("\nResults saved in 'ensemble_results.csv'")
