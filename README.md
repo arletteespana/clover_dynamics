@@ -89,6 +89,86 @@ python simulate_clover_dynamics.py
 
 This will run all simulations and generate `ensemble_results.csv`.
 
+## Example
+
+### Step-by-step Simulation: Specific Clover-Type Boolean Network
+
+This example reproduces the full and reduced (induced) dynamics of a Boolean network with a fixed "clover" topology. The goal is to walk through all steps necessary to compute the number of attractors, their periods, basin sizes, and transient times, using the specific network:
+
+```
+Edges and signs:
+1 → 2  (–)
+1 → 3  (–)
+1 → 4  (+)
+1 → 5  (+)
+2 → 1  (+)
+3 → 1  (+)
+4 → 1  (+)
+5 → 1  (–)
+```
+
+This network is manually encoded and analyzed using Python.
+
+#### Step-by-step Process
+
+**1. Define the Boolean Network**  
+We construct a 5-node network (`N = 5`) using the specified edges. The adjacency matrix `A` contains 1s where a connection exists, and the sign matrix `S` assigns +1 or -1 depending on whether the interaction is activatory or inhibitory. The interaction matrix is:
+
+```
+M = A * S
+```
+
+**2. Simulate the Full Boolean Dynamics**  
+We simulate the dynamics for all 32 initial states over T = 33 steps.
+
+Each trajectory is updated using:
+```
+x(t+1) = sign(Mᵗ x(t)), where sign(0) = +1
+```
+
+We detect:
+- Transient time: steps before a cycle
+- Attractor: repeating state pattern
+- Basin: number of initial conditions per attractor
+
+Metrics:
+- `Nc`: number of attractors
+- `mp`: mean period
+- `mtm`: mean transient
+- `mtM`: max transient
+- `avg_basin`: average basin size
+
+**3. Compute Dominant Set**  
+We find the dominant set `U`.  
+For this case: `U = {1}` and depth `d = 1`.
+
+**4. Build Induced Logic Network**  
+We identify cycles returning to node 1.  
+This yields recurrence length `ℓ = 3` and defines `Φ: B^ℓ → B`.
+
+**5. Simulate the Induced Dynamics**  
+We simulate all 8 possible histories of the dominant node.  
+We again extract the same metrics.
+
+#### Results
+
+**Full Dynamics**
+- `Nc`: 4
+- `mp`: 2.0
+- `mtm`: 4.88
+- `mtM`: 5
+- `avg_basin`: 8.0
+
+**Induced Dynamics**
+- `Nc`: 4
+- `mp`: 2.0
+- `mtm`: 4.5
+- `mtM`: 5
+- `avg_basin`: 2.0
+
+The induced logic captures the same attractors and cycle structure but with compressed basin size and slightly shorter average transients.
+
+
 ## Reference
 
 If you use this code, please cite the associated paper:
