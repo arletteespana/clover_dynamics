@@ -24,7 +24,7 @@ This analysis supports the results presented in the paper:
 ## File Structure
 
 ```
-code.txt                     # Main simulation code for ensemble dynamics
+code                         # Main simulation code for ensemble dynamics
 ensemble_results.csv         # Output with all computed metrics (automatically generated)
 ```
 
@@ -84,7 +84,7 @@ pip install numpy pandas matplotlib networkx
 Just execute the script directly:
 
 ```bash
-python code.txt
+python code.py
 ```
 
 This will run all simulations and generate `ensemble_results.csv`.
