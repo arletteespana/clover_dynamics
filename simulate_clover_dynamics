@@ -98,15 +98,21 @@ def find_cycles_to_zero(A, ℓ_max=None):
 
 # === 5. Construction of induced logic Φ: B^ℓ → B ===
 def build_phi_clover(A, S, ℓ):
+    M = A * S
+    N = A.shape[0]
     memory = {}
     for hist in product([-1, 1], repeat=ℓ):
-        x = np.ones(A.shape[0], dtype=int)
-        x[0] = hist[0]
-        for t in range(1, ℓ):
-            x[0] = hist[t]
-            x = np.sign((A * S).T @ x)
-            x[x == 0] = 1
-        memory[hist] = x[0]
+        x_hist = np.ones((ℓ + 1, N), dtype=int)
+        for t in range(ℓ):
+            x_hist[t, 0] = hist[t]
+        for t in range(1, ℓ + 1):
+            x_prev = x_hist[t - 1].copy()
+            x_prev[0] = hist[t - 1]
+            x_new = np.sign(M.T @ x_prev)
+            x_new[x_new == 0] = 1
+            x_new[0] = hist[t] if t < ℓ else x_new[0]
+            x_hist[t] = x_new
+        memory[hist] = x_hist[ℓ, 0]
     return lambda h: memory[tuple(h)]
 
 # === 6. Resumen de atractores y transitorios ===
