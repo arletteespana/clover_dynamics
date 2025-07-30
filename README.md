@@ -97,14 +97,14 @@ This example reproduces the full and reduced (induced) dynamics of a Boolean net
 
 ```
 Edges and signs:
-1 → 2  (–)
-1 → 3  (–)
-1 → 4  (+)
-1 → 5  (+)
-2 → 1  (+)
-3 → 1  (+)
-4 → 1  (+)
-5 → 1  (–)
+0 → 1  (–)
+0 → 2  (–)
+0 → 3  (+)
+0 → 4  (+)
+1 → 0  (+)
+2 → 0  (+)
+3 → 0  (+)
+4 → 0  (–)
 ```
 
 This network is manually encoded and analyzed using Python.
