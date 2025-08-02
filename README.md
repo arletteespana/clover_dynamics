@@ -21,6 +21,13 @@ This analysis supports the results presented in the paper:
 > **Dominant Vertices and Attractors’ Landscape for Boolean Networks**  
 > A. España, W. Fúnez, E. Ugalde
 
+## Installation
+
+**Clone the repository**:  
+   ```bash
+   git clone https://github.com/arletteespana/clover_dynamics.git
+   cd clover-dynamics
+
 ## File Structure
 
 ```
