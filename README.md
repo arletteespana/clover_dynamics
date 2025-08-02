@@ -27,7 +27,7 @@ This analysis supports the results presented in the paper:
    ```bash
    git clone https://github.com/arletteespana/clover_dynamics.git
    cd clover-dynamics
-
+   ```
 ## File Structure
 
 ```
