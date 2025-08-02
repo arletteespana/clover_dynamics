@@ -1,16 +1,11 @@
 # === Complete and induced dynamics for clover-type networks ===
 # Includes: network construction, complete simulation, induced logic, and indicator calculation.
 
-import numpy as np
-import pandas as pd
-from itertools import product
-from collections import defaultdict
-import csv
-import matplotlib.pyplot as plt
 import networkx as nx
-import random
-from collections import defaultdict
-import os
+import numpy as np
+import itertools
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # === 0. Delete repeated values ===
 def get_distinct_sets(list_of_sets):
