@@ -12,6 +12,19 @@ import random
 from collections import defaultdict
 import os
 
+# === 0. Delete repeated values ===
+def get_distinct_sets(list_of_sets):
+    seen = set()
+    result = []
+
+    for s in list_of_sets:
+        fs = frozenset(s)
+        if fs not in seen:
+            seen.add(fs)
+            result.append(s)
+
+    return result
+
 # === 1. Build Clover-type Network ===
 def build_fully_specified_clover_network(N, p):
     A = np.zeros((N + 1, N + 1), dtype=int)
@@ -39,24 +52,78 @@ def build_fully_specified_clover_network(N, p):
     A[0, 0] = 0
     return A
 
+# === 1.2 Build the NetworkX graph ===
+def build_clover_graph(N, p, seed=None):
+    """
+    Construye un DiGraph de NetworkX a partir de la matriz clover original.
+    """
+    A = build_fully_specified_clover_network(N, p, seed)
+    G = nx.DiGraph()
+    G.add_nodes_from(range(N + 1))
+    for i in range(N + 1):
+        for j in range(N + 1):
+            if A[i, j] == 1:
+                G.add_edge(i, j, sign=1)  # signo +1 por defecto
+    return G
+
 # === 2. Assign Signs to Interactions ===
 def assign_interaction_signs(A, q):
-    S = np.ones_like(A)
-    for i in range(A.shape[0]):
-        for j in range(A.shape[1]):
-            if A[i, j] != 0 and np.random.rand() < q:
-                S[i, j] = -1
-    return S
+    if seed is not None:
+        np.random.seed(seed)
+    for u, v in G.edges():
+        G[u][v]['sign'] = -1 if np.random.rand() < q else 1
+    return G
 
 # === 3. Boolean Dynamics ===
-def boolean_dynamics(M, x0, T):
-    traj = [x0.copy()]
-    x = x0.copy()
-    for _ in range(T):
-        x = np.sign(M.T @ x)
-        x[x == 0] = 1  # regla para signo cero
-        traj.append(x.copy())
-    return traj
+def simulate_full_boolean_dynamics(G, T):
+    """
+    Simulate the complete dynamics with the multiplicative rule:
+      x_i(t+1) = ∏_{p→i} [sign(p→i) * x_p(t)]
+    """
+   # def product_update(state):
+   #     new = {}
+   #     for node in G.nodes():
+   #         prod = 1
+   #         for pred in G.predecessors(node):
+   #             prod *= G[pred][node]['sign'] * state[pred]
+   #         new[node] = prod  # ya es +1 o -1
+   #     return new
+
+    """
+    Simulates the complete dynamics (sign) in all initial states.
+    """
+    def sign_update(state):
+        # state: dict nodo->±1
+        new = {}
+        for node in G.nodes():
+            total = sum(G[p][node]['sign'] * state[p] for p in G.predecessors(node))
+            new[node] = 1 if total >= 0 else -1
+        return new
+
+    results = {}
+    N = G.number_of_nodes()
+    # List all initial configurations ±1
+    for init in itertools.product([-1, 1], repeat=N):
+        state = {i: init[i] for i in range(N)}
+        seen = {tuple(init): 0}
+        orbit = [tuple(init)]
+        for t in range(1, T + 1):
+            state = sign_update(state)
+           # state = product_update(state)
+            tup = tuple(state[i] for i in range(N))
+            if tup in seen:
+                start = seen[tup]
+                attractor = orbit[start:]
+                results[init] = {
+                    'orbit': orbit,
+                    'transient': start,
+                    'period': len(attractor),
+                    'attractor': attractor
+                }
+                break
+            seen[tup] = t
+            orbit.append(tup)
+    return results
 
 # === 4. Dominant Set and Depth ===
 def get_dominant_set_and_depth(A):
@@ -77,137 +144,170 @@ def get_dominant_set_and_depth(A):
         depth += 1
     return sorted(U), depth
 
-# === 4. Detecting cycles returning to the dominant node ===
-def find_cycles_to_zero(A, ℓ_max=None):
+# === 5. Calculation of dynamic indicators ===
+def analyze_dynamics(results):
+    """
+    Calculate:
+        - Nc: number of unique attractors
+        - mp: mean period
+        - mtm: mean transient
+        - mtM: maximum transient
+    """
+    # Unique attractors
+    unique = [set(v['attractor']) for v in results.values()]
+    Nc = len(get_distinct_sets(unique))
+    periods = [v['period'] for v in results.values()]
+    transients = [v['transient'] for v in results.values()]
+    mp = np.mean(periods)
+    mtm = np.mean(transients)
+    mtM = np.max(transients)
+    return Nc, mp, mtm, mtM
+
+# === 6. Clover cycle and S vector detection ===
+def get_clover_cycles_and_S(A, S_mat):
+    """
+    Given A and S_mat, detect cycles that start from 0 and return to 0 by linear paths, 
+    calculate the sign of each cycle and construct the vector S.
+    """
     N = A.shape[0]
-    if ℓ_max is None:
-        ℓ_max = N + 1
-    cycles = []
-    def dfs(path):
-        last = path[-1]
-        if len(path) > ℓ_max:
-            return
-        for j in range(N):
-            if A[last, j]:
-                if j == 0 and len(path) > 1:
-                    cycles.append(list(path) + [0])
-                elif j not in path:
-                    dfs(path + [j])
-    dfs([0])
-    return cycles
+    cycles, signs = [], []
+    for j in range(1, N):
+        if A[0, j] == 1:
+            path, sign = [0], S_mat[0, j]
+            curr = j
+            while True:
+                path.append(curr)
+                if A[curr, 0] == 1:
+                    path.append(0)
+                    sign *= S_mat[curr, 0]
+                    cycles.append(path)
+                    signs.append(sign)
+                    break
+                # next node on linear path
+                nxt = np.where(A[curr] == 1)[0]
+                if len(nxt) != 1:
+                    break
+                sign *= S_mat[curr, nxt[0]]
+                curr = nxt[0]
+    max_len = max(len(c) for c in cycles)
+    S_vec = np.zeros(max_len - 1, dtype=int)
+    for c, s in zip(cycles, signs):
+        S_vec[len(c) - 2] += s
+    return cycles, S_vec
 
-# === 5. Construction of induced logic Φ: B^ℓ → B ===
-def build_phi_clover(A, S, ℓ):
-    M = A * S
-    N = A.shape[0]
-    memory = {}
-    for hist in product([-1, 1], repeat=ℓ):
-        x_hist = np.ones((ℓ + 1, N), dtype=int)
-        for t in range(ℓ):
-            x_hist[t, 0] = hist[t]
-        for t in range(1, ℓ + 1):
-            x_prev = x_hist[t - 1].copy()
-            x_prev[0] = hist[t - 1]
-            x_new = np.sign(M.T @ x_prev)
-            x_new[x_new == 0] = 1
-            x_new[0] = hist[t] if t < ℓ else x_new[0]
-            x_hist[t] = x_new
-        memory[hist] = x_hist[ℓ, 0]
-    return lambda h: memory[tuple(h)]
+# === 7. Induced phi function ===
+def get_phi_function(S_vec):
+    """
+    Returns the function phi(y) according to:
+     phi(y) = sign(sum(S_i * y_i) | y_0)
+    """
+    def phi(y):
+        total = sum(S_vec[i] * y[i] for i in range(len(S_vec)))
+        return int(np.sign(total)) if total != 0 else y[0]
+    return phi
 
-# === 6. Resumen de atractores y transitorios ===
-def summarize(attractors_dict, transients):
-    periods = [len(set(x[1] for x in values)) for values in attractors_dict.values()]
-    return {
-        'Nc': len(attractors_dict),
-        'mp': round(np.mean(periods), 2),
-        'mtm': round(np.mean(transients), 2),
-        'mtM': int(np.max(transients)),
-        'avg_basin': round(np.mean([len(v) for v in attractors_dict.values()]), 2)
-    }
-
-# === 7. Full simulation and induced logic (using the entire space) ===
-def simulate_clover_dynamics(N, p, q):
-    T = 2**(N + 1) + 1
-    A = build_fully_specified_clover_network(N, p)
-    S = assign_interaction_signs(A, q)
-    M = A * S
-    U, d = get_dominant_set_and_depth(A)
-    cycles = find_cycles_to_zero(A)
-    ℓ = max(len(c) for c in cycles) if cycles else 1
-    Phi = build_phi_clover(A, S, ℓ)
-
-    state_space_full = [np.array([1 if b == '1' else -1 for b in format(i, f'0{N+1}b')]) for i in range(2**(N+1))]
-    attractors_full, transients_full = defaultdict(list), []
-    for x0 in state_space_full:
-        traj = boolean_dynamics(M, x0, T)
-        seen = {}
-        for t, state in enumerate(traj):
-            key = tuple(state)
+# === 8. Induced dynamics simulation ===
+def simulate_induced_dynamics(phi, segments):
+    results = {}
+    ell = len(segments[0])
+    for init in segments:
+        hist = list(init)
+        seen = {' '.join(map(str, hist)): 0}
+        orbit = [tuple(hist)]
+        for t in range(1, 2**ell + 1):
+            nv = phi(hist)
+            hist = [nv] + hist[:-1]
+            key = ' '.join(map(str, hist))
             if key in seen:
                 start = seen[key]
-                attractors_full[tuple(traj[start])].append((x0.tolist(), t))
-                transients_full.append(t)
-                break
-            seen[key] = t
-
-    state_space_induced = list(product([-1, 1], repeat=ℓ))
-    attractors_induced, transients_induced = defaultdict(list), []
-    for y0 in state_space_induced:
-        history = list(y0)
-        seen = {}
-        for t in range(T):
-            key = tuple(history)
-            if key in seen:
-                start = seen[key]
-                attractors_induced[tuple(history)].append((list(y0), t))
-                transients_induced.append(t)
-                break
-            seen[key] = t
-            y_next = Phi(history)
-            history = [y_next] + history[:-1]
-
-    return {
-        'd': d,
-        'ℓ': ℓ,
-        'metrics_full': summarize(attractors_full, transients_full),
-        'metrics_induced': summarize(attractors_induced, transients_induced),
-        'A': A, 'S': S, 'M': M, 'Phi': Phi
-    }
-
-# === Average ensemble for Ns, p_values, q_values, saved to CSV===
-if __name__ == '__main__':
-    Ns = [4, 7, 10]
-    p_values = [1/4, 1/2, 3/4]
-    q_values = [1/4, 1/2, 3/4]
-    num_graphs = 10
-
-    rows = []
-    for N in Ns:
-        for p in p_values:
-            for q in q_values:
-                metrics_full_ens = defaultdict(list)
-                metrics_ind_ens = defaultdict(list)
-                for _ in range(num_graphs):
-                    result = simulate_clover_dynamics(N, p, q)
-                    for k, v in result['metrics_full'].items():
-                        metrics_full_ens[k].append(v)
-                    for k, v in result['metrics_induced'].items():
-                        metrics_ind_ens[k].append(v)
-                avg_full = {k: round(np.mean(v), 2) for k, v in metrics_full_ens.items()}
-                avg_ind = {k: round(np.mean(v), 2) for k, v in metrics_ind_ens.items()}
-                row = {
-                    'N': N, 'p': p, 'q': q,
-                    **{f'F_{k}': v for k, v in avg_full.items()},
-                    **{f'Phi_{k}': v for k, v in avg_ind.items()}
+                attractor = orbit[start:]
+                results[init] = {
+                    'orbit': orbit,
+                    'transient': start,
+                    'period': len(attractor),
+                    'attractor': attractor
                 }
-                rows.append(row)
+                break
+            seen[key] = t
+            orbit.append(tuple(hist))
+    return results
 
-    with open('ensemble_results.csv', 'w', newline='') as csvfile:
-        fieldnames = rows[0].keys()
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+# === 10. Full pipeline: compare full vs. induced ===
+def full_vs_induced_clover(N=5, p=0.5, q=0.5, seed=None):
+    """
+    Builds the Clover network, assigns signs, simulates full and induced dynamics,
+    and returns a DataFrame with Nc, mp, mtm, and mtM for each case.
+    """
+    # 1) Clover graph and signs
+    G = build_clover_graph(N, p, seed)
+    G = assign_edge_signs(G, q, seed)
+    # === Circular positions with node 0 in the center ===
+    pos = {0: (0, 0)}
+    angles = np.linspace(0, 2 * np.pi, N, endpoint=False)
+    for idx, angle in enumerate(angles, start=1):
+        pos[idx] = (np.cos(angle), np.sin(angle))
 
-    print("\nResults saved in 'ensemble_results.csv'")
+    # === Drawing the graph ===
+    plt.figure(figsize=(6, 6))
+    nx.draw(
+        G, pos,
+        with_labels=True,
+        node_color='lightblue',
+        node_size=800,
+        arrowsize=20,
+        font_weight='bold'
+    )
+    edge_labels = nx.get_edge_attributes(G, 'sign')
+    nx.draw_networkx_edge_labels(
+        G, pos,
+        edge_labels=edge_labels,
+        label_pos=0.5,
+        font_color='red'
+    )
+
+
+    # 2) A y S_mat matrices
+    A = nx.to_numpy_array(G, dtype=int)
+    S_mat = np.zeros_like(A, dtype=int)
+    for u, v, data in G.edges(data=True):
+        S_mat[u, v] = data['sign']
+    print('A=', '\n',A)
+    print('S_mat=', '\n', S_mat)
+
+
+    # 3) Full dynamics
+    T = 2**N + 1
+    full_res = simulate_full_boolean_dynamics(G, T)
+    Nc_f, mp_f, mtm_f, mtM_f = analyze_dynamics(full_res)
+    print('full_res=', full_res)
+    #print('Nc=', Nc_f, 'mp=', mp_f, 'mtm=', mtm_f, 'mtM=', mtM_f)
+
+
+    # 4) Cycle detection and phi function
+    c, S_vec = get_clover_cycles_and_S(A, S_mat)
+    phi = get_phi_function(S_vec)
+    print('ciclos=', c)
+    print('S_vec=', S_vec)
+    #print('phi=', phi)
+
+    # 5) Stories to evaluate
+    #segments = compute_h_segments(full_res, len(S_vec), dom=0)
+    ell=len(S_vec)
+    segments=list(itertools.product([-1,1], repeat=ell))  # full 2^ell space
+    #print('Segments=', segments)
+
+    # 6) Induced dynamics
+    ind_res = simulate_induced_dynamics(phi, segments)
+    Nc_i, mp_i, mtm_i, mtM_i = analyze_dynamics(ind_res)
+    print('ind_res=', ind_res)
+
+    # 7) Output
+    df = pd.DataFrame([
+        {'Tipo': 'Completa', 'Nc': Nc_f, 'mp': mp_f, 'mtm': mtm_f, 'mtM': mtM_f},
+        {'Tipo': 'Inducida', 'Nc': Nc_i, 'mp': mp_i, 'mtm': mtm_i, 'mtM': mtM_i}
+    ])
+    return df
+
+# === Example of execution ===
+df_comparison = full_vs_induced_clover(N=3, p=0.5, q=0.5)
+df_comparison
