@@ -1,6 +1,8 @@
 # Dominant Vertices and Attractors’ Landscape in Boolean Networks
 
-This repository contains the full implementation for generating and analyzing **clover-type Boolean networks** with signed interactions. The simulations evaluate the **complete and induced dynamics**, compute **dominant sets**, and measure various indicators related to the attractors’ landscape.
+This repository contains the full implementation (MATLAB/GNU Octave and Python) for generating and analyzing **clover-type Boolean networks** with signed interactions. The simulations evaluate the **complete and induced dynamics**, compute **dominant sets**, and measure various indicators related to the attractors’ landscape.
+
+---
 
 ## Overview
 
@@ -16,157 +18,169 @@ The code supports:
   - Average basin size (`avg_basin`)
 - Ensemble averaging over multiple realizations.
 
-This analysis supports the results presented in the paper:
+---
 
-> **Dominant Vertices and Attractors’ Landscape for Boolean Networks**  
-> A. España, W. Fúnez, E. Ugalde
+## Repository Structure
 
-## Installation
+clover_dynamics/
 
-**Clone the repository**:  
-   ```bash
-   git clone https://github.com/arletteespana/clover_dynamics.git
-   cd clover-dynamics
-   ```
-## File Structure
+- matlab/
+  - tree_clover_reduction.m        (Main MATLAB/Octave simulation script)
+  - Bin.m                          (Binary state conversion helper)
+  - AnalisisTransicion.m           (Attractor and basin analysis)
 
-```
-simulate_clover_dynamics     # Main simulation code for ensemble dynamics
-ensemble_results.csv         # Output with all computed metrics (automatically generated)
-```
+- simulate_clover_dynamics.py      (Python implementation – ensemble simulation)
+- ensemble_results.csv             (Python output – automatically generated)
+- results/                         (Optional output folder)
 
-## How It Works
+---
 
-The script simulates dynamics of networks of dimension `N` with probabilities `p` and `q`:
+# MATLAB / GNU Octave Implementation
 
-- `p`: probability of creating a connection from the root node to other nodes.
-- `q`: probability that an interaction is **inhibitory** (sign = –1); otherwise, it's activatory (+1).
+This implementation generates **tree-like (clover) directed networks**, assigns inhibitory interactions with probability `q`, and compares:
 
-For each combination of `(N, p, q)`, it:
+- The **full Boolean dynamics** on `2^N` states
+- The **reduced induced dynamics** on `2^ℓ` states, where `ℓ` is the recurrence length of the clover structure
 
-1. Builds the network (`A`)
-2. Assigns interaction signs (`S`)
-3. Computes full Boolean dynamics on all states
-4. Constructs the reduced logic (`Φ`) via dominant nodes
-5. Compares dynamics:
-   - Full transition graph vs. Induced dynamics
-6. Outputs average statistics across `num_graphs` realizations
+---
 
-## Output Format
+## Requirements (MATLAB / Octave)
+
+- MATLAB (R20xx or newer), or
+- GNU Octave
+
+---
+
+## Running in Octave
+
+From the repository root:
+
+    octave -qf matlab/tree_clover_reduction.m
+
+---
+
+## Running in MATLAB
+
+Open MATLAB and run:
+
+    run('matlab/tree_clover_reduction.m')
+
+---
+
+## What the MATLAB Script Does
+
+For fixed parameters:
+
+- `N` — number of nodes
+- `p` — probability of creating branches from the root
+- `q` — probability that an interaction is inhibitory
+
+The script:
+
+1. Generates a directed clover-type topology
+2. Assigns signed interactions
+3. Builds the full transition map on all `2^N` states
+4. Constructs the reduced transition map on `2^ℓ` states
+5. Computes attractor and basin statistics:
+   - Number of basins (`Nc`)
+   - Mean and standard deviation of periods
+   - Mean and standard deviation of transient times
+   - Maximum transient depth
+6. Aggregates statistics across multiple realizations (`Ne` networks)
+
+The resulting summary matrices are stored in the workspace and may optionally be saved to the `results/` directory.
+
+---
+
+# Python Implementation
+
+The Python version performs:
+
+- Random generation of **clover-type network topologies**
+- Assignment of interaction signs (±1)
+- Construction of the **full Boolean transition map**
+- Construction of the **induced logical system (Φ)**
+- Exhaustive state-space simulation
+- Attractor and basin analysis
+- Ensemble averaging across multiple realizations
+
+---
+
+## Installation (Python)
+
+Clone the repository:
+
+    git clone https://github.com/arletteespana/clover_dynamics.git
+    cd clover_dynamics
+
+Install dependencies:
+
+    pip install numpy pandas matplotlib networkx
+
+---
+
+## Requirements (Python)
+
+- numpy
+- pandas
+- matplotlib
+- networkx
+
+---
+
+## Running the Python Code
+
+    python simulate_clover_dynamics.py
+
+This will execute all simulations and generate:
+
+    ensemble_results.csv
+
+---
+
+## Output Format (Python)
 
 The results are saved in `ensemble_results.csv` with the following columns:
 
-| Column             | Description                                        |
-|--------------------|----------------------------------------------------|
-| `N`, `p`, `q`      | Network size and control parameters                |
-| `F_*`              | Indicators for full dynamics (complete graph)      |
-| `Phi_*`            | Indicators for induced logic (reduced dynamics)    |
+- `N`, `p`, `q` — Network size and control parameters
+- `F_*` — Indicators for full dynamics (complete graph)
+- `Phi_*` — Indicators for induced logic (reduced dynamics)
 
 Where `*` can be:
-- `Nc`: number of attractors
-- `mp`: mean period
-- `mtm`: mean transient time
-- `mtM`: max transient time
-- `avg_basin`: average basin size
 
-## Requirements
+- `Nc` — number of attractors
+- `mp` — mean period
+- `mtm` — mean transient time
+- `mtM` — maximum transient time
+- `avg_basin` — average basin size
 
-This code runs in Python and depends on:
+---
 
-```bash
-numpy
-pandas
-matplotlib
-networkx
-```
+# Example (Python)
 
-Install using:
+Specific clover-type Boolean network:
 
-```bash
-pip install numpy pandas matplotlib networkx
-```
-
-## Running the Code
-
-Just execute the script directly:
-
-```bash
-python simulate_clover_dynamics.py
-```
-
-This will run all simulations and generate `ensemble_results.csv`.
-
-## Example
-
-### Step-by-step Simulation: Specific Clover-Type Boolean Network
-
-This example reproduces the full and reduced (induced) dynamics of a Boolean network with a fixed "clover" topology. The goal is to walk through all steps necessary to compute the number of attractors, their periods, basin sizes, and transient times, using the specific network:
-
-```
 Edges and signs:
-0 → 1  (–)
-0 → 2  (–)
-0 → 3  (+)
-0 → 4  (+)
-1 → 0  (+)
-2 → 0  (+)
-3 → 0  (+)
+
+0 → 1  (–)  
+0 → 2  (–)  
+0 → 3  (+)  
+0 → 4  (+)  
+1 → 0  (+)  
+2 → 0  (+)  
+3 → 0  (+)  
 4 → 0  (–)
-```
 
-This network is manually encoded and analyzed using Python.
+Results:
 
-#### Step-by-step Process
-
-**1. Define the Boolean Network**  
-We construct a 5-node network (`N = 5`) using the specified edges. The adjacency matrix `A` contains 1s where a connection exists, and the sign matrix `S` assigns +1 or -1 depending on whether the interaction is activatory or inhibitory. The interaction matrix is:
-
-```
-M = A * S
-```
-
-**2. Simulate the Full Boolean Dynamics**  
-We simulate the dynamics for all 32 initial states over T = 33 steps.
-
-Each trajectory is updated using:
-```
-x(t+1) = sign(Mᵗ x(t)), where sign(0) = +1
-```
-
-We detect:
-- Transient time: steps before a cycle
-- Attractor: repeating state pattern
-- Basin: number of initial conditions per attractor
-
-Metrics:
-- `Nc`: number of attractors
-- `mp`: mean period
-- `mtm`: mean transient
-- `mtM`: max transient
-- `avg_basin`: average basin size
-
-**3. Compute Dominant Set**  
-We find the dominant set `U`.  
-For this case: `U = {1}` and depth `d = 1`.
-
-**4. Build Induced Logic Network**  
-We identify cycles returning to node 1.  
-This yields recurrence length `ℓ = 3` and defines `Φ: B^ℓ → B`.
-
-**5. Simulate the Induced Dynamics**  
-We simulate all 8 possible histories of the dominant node.  
-We again extract the same metrics.
-
-#### Results
-
-**Full Dynamics**
+Full Dynamics
 - `Nc`: 4
 - `mp`: 2.0
 - `mtm`: 4.88
 - `mtM`: 5
 - `avg_basin`: 8.0
 
-**Induced Dynamics**
+Induced Dynamics
 - `Nc`: 4
 - `mp`: 2.0
 - `mtm`: 4.5
@@ -175,11 +189,15 @@ We again extract the same metrics.
 
 The induced logic captures the same attractors and cycle structure but with compressed basin size and slightly shorter average transients.
 
+---
 
-## Reference
+# Reference
 
-If you use this code, please cite the associated paper:
+If you use this code, please cite:
 
-```
-A. España, W. Fúnez, E. Ugalde. "Dominant Vertices and Attractors’ Landscape for Boolean Networks", 2025.
-```
+A. España, W. Fúnez, E. Ugalde. Dominant vertices and attractors’ landscape for Boolean networks. 2025. arXiv: 2509.03654 [math.DS]. url: https://arxiv.org/abs/2509.03654.
+---
+
+# License
+
+This repository is released under the MIT License.
