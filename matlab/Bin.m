@@ -6,3 +6,4 @@ function s = Bin(k, N)
   b = floor(k ./ base);
   s = mod(b, 2);
 endfunction
+
